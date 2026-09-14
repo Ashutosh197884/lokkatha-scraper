@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-primary: #04060c;
+    --bg-surface: rgba(11, 17, 34, 0.75);
+    --border-glass: rgba(255, 255, 255, 0.08);
+    --border-glass-hover: rgba(56, 189, 248, 0.3);
+  }
+
+  body {
+    background-color: var(--bg-primary);
+    color: #f1f5f9;
+    font-family: 'Inter', system-ui, sans-serif;
+    user-select: none;
+    overflow: hidden;
+  }
+
+  /* Custom subtle scrollbar */
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  ::-webkit-scrollbar-track {
+    background: rgba(4, 6, 12, 0.5);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(56, 189, 248, 0.4);
+  }
+}
+
+/* Glassmorphism card styles */
+.glass-panel {
+  background: rgba(11, 17, 34, 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
+}
+
+.glass-panel-hover {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glass-panel-hover:hover {
+  border-color: rgba(56, 189, 248, 0.35);
+  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.6), 0 0 20px -5px rgba(56, 189, 248, 0.2);
+}
+
+/* Solar glow keyframes */
+@keyframes pulse-sun-core {
+  0%, 100% {
+    box-shadow: 0 0 45px 15px rgba(245, 158, 11, 0.35), 0 0 90px 30px rgba(239, 68, 68, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 65px 25px rgba(245, 158, 11, 0.5), 0 0 120px 45px rgba(239, 68, 68, 0.25);
+  }
+}
+
+.sun-glow-effect {
+  animation: pulse-sun-core 3.5s ease-in-out infinite;
+}
+
+/* Radial radar scan line */
+@keyframes radar-sweep {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.radar-sweep {
+  animation: radar-sweep 6s linear infinite;
+}
+
+/* Cosmic noise background texture overlay */
+.cosmic-grid {
+  background-image: linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 40px 40px;
+}

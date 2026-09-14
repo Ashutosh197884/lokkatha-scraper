@@ -1,0 +1,10 @@
+# Lokkatha Seed Websites (Indian Folklore & Oral Traditions Archives)
+# Lines starting with # are comments. Empty lines are ignored.
+
+https://ignca.gov.in
+https://sahapedia.org
+https://indiantribalheritage.org
+https://folklore.org.in
+https://ruralindiaonline.org/en/stories/categories/culture/
+https://sacred-texts.com/hin/ft/index.htm
+https://folk-lore.in

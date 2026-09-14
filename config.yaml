@@ -1,0 +1,65 @@
+project:
+  name: "lokkatha-scraper"
+  version: "0.1.0"
+  description: "Web Intelligence and Folklore Scraping System for Indian Folklore & Traditional Knowledge"
+
+crawler:
+  max_pages: 1000
+  max_depth: 4
+  concurrency: 5
+  request_timeout: 20.0
+  delay_seconds: 1.0
+  follow_external_links: false
+  respect_robots_txt: true
+  save_raw_html: true
+  max_content_size_mb: 10.0
+  user_agent: "LokkathaBot/0.1 (+https://lokkatha.org/bot; cultural-research-crawler)"
+
+robots:
+  enabled: true
+  cache_ttl_seconds: 86400
+
+browser:
+  enabled: true
+  headless: true
+  timeout_seconds: 30.0
+
+storage:
+  raw_dir: "data/raw"
+  cleaned_dir: "data/cleaned"
+  structured_dir: "data/structured"
+  rejected_dir: "data/rejected"
+  save_raw: true
+  save_cleaned: true
+  save_structured: true
+
+deduplication:
+  exact: true
+  semantic: true
+  similarity_threshold: 0.90
+
+ai:
+  enabled: false
+  extraction: true
+  environmental_analysis: true
+  provider: "none"
+  model: "none"
+
+domains:
+  allow: []
+  deny:
+    - "facebook.com"
+    - "instagram.com"
+    - "youtube.com"
+    - "twitter.com"
+    - "x.com"
+    - "pinterest.com"
+    - "tiktok.com"
+
+database:
+  enabled: false
+  host: "localhost"
+  port: 5432
+  name: "lokkatha"
+  user: "postgres"
+  password: ""
