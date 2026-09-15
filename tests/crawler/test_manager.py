@@ -120,3 +120,43 @@ async def test_crawl_manager_respects_robots_blocking(tmp_path):
         assert len(results) == 0
         stats = manager.frontier.get_stats()
         assert stats["blocked"] == 1
+
+
+@pytest.mark.asyncio
+async def test_crawl_manager_respects_max_pages_under_concurrency(tmp_path):
+    """max_pages must be an exact cap even with concurrent workers (no overshoot,
+    no 0-treated-as-unlimited)."""
+    fetched: list[str] = []
+
+    def mock_handler(request: httpx.Request):
+        path = request.url.path
+        if path == "/robots.txt":
+            return httpx.Response(200, text="User-agent: *\nAllow: /\n")
+        fetched.append(path)
+        return httpx.Response(200, text=PAGE_2_HTML, headers={"Content-Type": "text/html"})
+
+    settings = Settings(
+        storage={"raw_dir": str(tmp_path / "raw")},
+        crawler={
+            "max_pages": 100,  # generous default, so the explicit cap is what binds
+            "max_depth": 0,
+            "concurrency": 5,
+            "delay_seconds": 0.0,
+        },
+    )
+
+    transport = httpx.MockTransport(mock_handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        seeds = [f"https://example.org/page/{i}" for i in range(5)]
+
+        for cap in (1, 3, 5):
+            manager = CrawlManager(settings)
+            results = await manager.crawl(
+                seeds=seeds,
+                max_pages=cap,
+                max_depth=0,
+                client=client,
+            )
+            assert len(results) == cap, (
+                f"expected exactly {cap} pages, got {len(results)}"
+            )
