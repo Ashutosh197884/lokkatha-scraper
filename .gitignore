@@ -29,6 +29,9 @@ wheels/
 .coverage
 htmlcov/
 
+# Vercel
+.vercel/
+
 # Environment variables
 .env
 .env.local
@@ -61,3 +64,8 @@ data/rejected/*
 .DS_Store
 Thumbs.db
 *.log
+
+# Vercel CLI logs
+vercel_*.log
+api_server.log
+vite.log
