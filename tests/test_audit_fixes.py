@@ -1,5 +1,7 @@
 """Regression tests for audit fixes: pipeline wiring, path safety, retry escalation, politeness."""
 
+import asyncio
+import json
 from pathlib import Path
 
 import httpx
@@ -10,6 +12,63 @@ from app.crawler.http_client import HTTPCrawler
 from app.crawler.retry import RetryableHTTPStatusError, retry_with_backoff
 from app.pipeline import process_crawl_results
 from app.storage.repository import JSONFolkloreRepository, validate_safe_id
+
+
+class TestAPIServer:
+    """Tests for the runnable stdlib HTTP + SSE server."""
+
+    @pytest.mark.asyncio
+    async def test_api_server_endpoints_and_sse(self, tmp_path):
+        import httpx
+
+        from app.api.run_server import LokkathaHTTPServer
+
+        server = LokkathaHTTPServer(repo=JSONFolkloreRepository(str(tmp_path / "structured")))
+        tcp = await asyncio.start_server(server.handle_client, "127.0.0.1", 0)
+        port = tcp.sockets[0].getsockname()[1]
+        try:
+            async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{port}", timeout=10) as client:
+                # Health endpoint
+                r = await client.get("/api/health")
+                assert r.status_code == 200
+                assert r.json()["status"] == "healthy"
+
+                # Sources listing + registration
+                r = await client.get("/api/sources")
+                assert r.status_code == 200 and len(r.json()) >= 1
+                r = await client.post("/api/sources", json={"url": "https://example.org/tales"})
+                assert r.status_code == 200
+
+                # Unknown route + bad body
+                r = await client.get("/api/nope")
+                assert r.status_code == 404
+                r = await client.post("/api/tasks", content=b"not json")
+                assert r.status_code == 400
+
+                # Traversal-safe doc id handling
+                r = await client.get("/api/folklore/..%2F..%2Fsecrets")
+                assert r.status_code == 400
+
+                # SSE: subscribe, then trigger an event via a task start
+                events: list = []
+
+                async def listen():
+                    async with client.stream("GET", "/api/events") as sse:
+                        async for chunk in sse.aiter_text():
+                            for line in chunk.splitlines():
+                                if line.startswith("data: "):
+                                    events.append(json.loads(line[6:])["event_type"])
+                                    if events[-1] == "task.started":
+                                        return
+
+                listener = asyncio.create_task(listen())
+                await asyncio.sleep(0.1)
+                await client.post("/api/tasks", json={"url": "https://127.0.0.1:1/x", "max_pages": 1, "depth": 0})
+                await asyncio.wait_for(listener, timeout=10)
+                assert "task.started" in events
+        finally:
+            tcp.close()
+            await tcp.wait_closed()
 
 
 FOLK_PAGE = """
