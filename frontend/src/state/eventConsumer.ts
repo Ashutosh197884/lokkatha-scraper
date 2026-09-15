@@ -40,7 +40,7 @@ export class PipelineEventConsumer {
   private eventSource: EventSource | null = null;
   private listeners: ((event: PipelineEventMessage) => void)[] = [];
 
-  constructor(sseUrl: string = "/api/events") {
+  constructor(sseUrl: string = `${import.meta.env.VITE_API_BASE_URL ?? ""}/api/events`) {
     this.sseUrl = sseUrl;
   }
 
