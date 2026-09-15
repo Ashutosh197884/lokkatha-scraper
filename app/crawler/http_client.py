@@ -6,7 +6,7 @@ import httpx
 
 from app.config.logging import get_logger
 from app.config.settings import Settings, get_settings
-from app.crawler.retry import retry_with_backoff
+from app.crawler.retry import RETRYABLE_HTTP_STATUSES, RetryableHTTPStatusError, retry_with_backoff
 from app.schemas.crawl import CrawlResult
 from app.utils.hashing import compute_sha256
 from app.utils.urls import extract_domain, normalize_url
@@ -82,6 +82,11 @@ class HTTPCrawler:
 
         async def _execute_request() -> CrawlResult:
             response = await client.get(norm_url)
+
+            # Escalate transient HTTP statuses (429/5xx) so retry_with_backoff can kick in.
+            if response.status_code in RETRYABLE_HTTP_STATUSES:
+                raise RetryableHTTPStatusError(response.status_code)
+
             content_type_header = response.headers.get("content-type", "").lower()
             mime_type = content_type_header.split(";")[0].strip()
 
@@ -155,6 +160,16 @@ class HTTPCrawler:
 
         try:
             return await retry_with_backoff(_execute_request, max_retries=3, initial_delay=1.0)
+        except RetryableHTTPStatusError as exc:
+            logger.warning("http_crawl_retries_exhausted", url=norm_url, status=exc.status_code)
+            return CrawlResult(
+                url=url,
+                normalized_url=norm_url,
+                domain=domain,
+                status_code=exc.status_code,
+                is_success=False,
+                error=f"http_status_{exc.status_code}_retries_exhausted",
+            )
         except Exception as exc:
             logger.warning("http_crawl_failed", url=norm_url, error=str(exc))
             return CrawlResult(

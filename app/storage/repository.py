@@ -1,12 +1,25 @@
 """File-based JSON and relational repository implementations with metadata provenance."""
 
 import json
+import re
 from pathlib import Path
 from typing import List, Optional
 from app.config.logging import get_logger
 from app.schemas.folklore import FolkloreDocument
 
 logger = get_logger("storage.repository")
+
+# Only allow safe filesystem identifiers: letters, digits, dash, underscore, dot.
+_SAFE_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def validate_safe_id(doc_id: str) -> str:
+    """Raise ValueError if an id could traverse directories (e.g. '../x' or absolute paths)."""
+    if not doc_id or not _SAFE_ID_PATTERN.match(doc_id):
+        raise ValueError(f"Unsafe document id: {doc_id!r}")
+    if doc_id.startswith("."):
+        raise ValueError(f"Unsafe document id: {doc_id!r}")
+    return doc_id
 
 
 class JSONFolkloreRepository:
@@ -18,6 +31,7 @@ class JSONFolkloreRepository:
 
     def save(self, doc: FolkloreDocument) -> Path:
         """Save folklore document to JSON file with standard source_information block."""
+        validate_safe_id(doc.id)
         file_path = self.base_dir / f"{doc.id}.json"
         with open(file_path, "w", encoding="utf-8") as f:
             json_dict = doc.model_dump_with_source_info()
@@ -26,7 +40,8 @@ class JSONFolkloreRepository:
         return file_path
 
     def get_by_id(self, doc_id: str) -> Optional[FolkloreDocument]:
-        """Load folklore document by ID."""
+        """Load folklore document by ID. Raises ValueError for unsafe ids."""
+        validate_safe_id(doc_id)
         file_path = self.base_dir / f"{doc_id}.json"
         if not file_path.is_file():
             return None

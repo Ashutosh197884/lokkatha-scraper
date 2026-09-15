@@ -14,6 +14,7 @@ from app import __version__
 from app.config.logging import configure_logging, get_logger
 from app.config.settings import get_settings
 from app.crawler.manager import CrawlManager
+from app.pipeline import process_crawl_results
 from app.storage.repository import JSONFolkloreRepository
 
 console = Console()
@@ -55,7 +56,8 @@ async def handle_crawl(args: argparse.Namespace) -> int:
         console.print("[bold yellow]Warning:[/bold yellow] No seed URLs provided. Provide a URL or --seeds file.")
         return 1
 
-    max_pages = args.max_pages or settings.crawler.max_pages
+    # Note: `args.max_pages or ...` would ignore a valid --max-pages 0; use None check.
+    max_pages = args.max_pages if args.max_pages is not None else settings.crawler.max_pages
     depth = args.depth if args.depth is not None else settings.crawler.max_depth
 
     table = Table(title="Lokkatha Crawl Configuration", border_style="cyan")
@@ -72,10 +74,19 @@ async def handle_crawl(args: argparse.Namespace) -> int:
     manager = CrawlManager(settings)
     results = await manager.crawl(seeds=seeds, max_pages=max_pages, max_depth=depth)
 
+    # Convert fetched pages into structured folklore documents with provenance.
+    docs, evidence_records, duplicates = process_crawl_results(results, settings=settings)
+
+    repo = JSONFolkloreRepository(base_dir=settings.storage.structured_dir)
+    for doc in docs:
+        repo.save(doc)
+
     console.print(
         Panel(
             f"[bold green]Crawl Completed[/bold green]\n"
-            f"Seeds: {len(seeds)} | Results processed: {len(results)}\n"
+            f"Seeds: {len(seeds)} | Pages fetched: {len(results)}\n"
+            f"Folklore records extracted: [cyan]{len(docs)}[/cyan] "
+            f"(duplicates skipped: {duplicates}, evidence records: {len(evidence_records)})\n"
             f"Output Directory: [cyan]{settings.storage.structured_dir}[/cyan]",
             border_style="green",
         )

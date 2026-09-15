@@ -40,6 +40,8 @@ class CrawlManager:
         )
         self.http_crawler = http_crawler or HTTPCrawler(self.settings)
         self.link_extractor = LinkExtractor()
+        # Domains whose robots.txt Crawl-delay we have already applied to the limiter.
+        self._crawl_delay_applied: set = set()
 
     async def _crawl_worker(
         self,
@@ -59,10 +61,11 @@ class CrawlManager:
 
             item = await self.frontier.next_url()
             if item is None:
-                # Check if all frontier items processed
-                if self.frontier.is_empty():
+                # Keep waiting while other workers are mid-fetch (they may enqueue
+                # child links); only exit when the frontier is fully drained.
+                if not self.frontier.has_pending_work():
                     await asyncio.sleep(0.1)
-                    if self.frontier.is_empty():
+                    if not self.frontier.has_pending_work():
                         break
                 await asyncio.sleep(0.05)
                 continue
@@ -76,6 +79,15 @@ class CrawlManager:
                     logger.info("url_blocked_by_robots", url=norm_url)
                     await self.frontier.mark_status(norm_url, CrawlStatus.BLOCKED, error_message="robots_txt_disallow")
                     continue
+
+                # Honor robots.txt Crawl-delay for this domain (once per crawl).
+                domain = item.domain
+                if domain and domain not in self._crawl_delay_applied:
+                    crawl_delay = await self.robots.get_crawl_delay(item.url, client=client)
+                    if crawl_delay and crawl_delay > self.rate_limiter.default_delay:
+                        self.rate_limiter.set_domain_delay(domain, crawl_delay)
+                        logger.info("robots_crawl_delay_applied", domain=domain, crawl_delay=crawl_delay)
+                    self._crawl_delay_applied.add(domain)
 
                 # Rate limiting politeness wait
                 await self.rate_limiter.wait(item.url)

@@ -32,6 +32,8 @@ class URLFrontier:
         self._seen_urls: Set[str] = set()
         self._items_by_url: Dict[str, URLFrontierItem] = {}
         self._lock = asyncio.Lock()
+        # Items currently being fetched by a worker (status FETCHING).
+        self._in_flight = 0
 
         # Metrics counters
         self.metrics = {
@@ -130,6 +132,7 @@ class URLFrontier:
                     item.status = CrawlStatus.FETCHING
                     item.attempts += 1
                     item.last_attempt_at = datetime.now(timezone.utc).isoformat()
+                    self._in_flight += 1
                     return item
             return None
 
@@ -143,6 +146,8 @@ class URLFrontier:
         async with self._lock:
             item = self._items_by_url.get(normalized_url)
             if item:
+                if item.status == CrawlStatus.FETCHING:
+                    self._in_flight = max(0, self._in_flight - 1)
                 item.status = status
                 if error_message:
                     item.error_message = error_message
@@ -157,6 +162,17 @@ class URLFrontier:
     def is_empty(self) -> bool:
         """Return True if there are no pending queued URLs."""
         return not any(item.status == CrawlStatus.QUEUED for item in self._queue)
+
+    def has_pending_work(self) -> bool:
+        """Return True if URLs are queued or currently being fetched by a worker.
+
+        Workers must check this (not just is_empty) before exiting, otherwise the
+        crawl can terminate while another worker is mid-fetch about to enqueue
+        newly discovered child links.
+        """
+        if self._in_flight > 0:
+            return True
+        return any(item.status == CrawlStatus.QUEUED for item in self._queue)
 
     def total_seen(self) -> int:
         """Return count of unique URLs registered."""

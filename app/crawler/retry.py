@@ -11,10 +11,27 @@ logger = get_logger("crawler.retry")
 
 T = TypeVar("T")
 
+# HTTP statuses that are transient and worth retrying with backoff.
+RETRYABLE_HTTP_STATUSES = {429, 500, 502, 503, 504}
+
+
+class RetryableHTTPStatusError(Exception):
+    """Raised when a fetch returns a transient HTTP status (e.g. 429/503) so the retry layer can back off.
+
+    Carries the offending status code for downstream error reporting.
+    """
+
+    def __init__(self, status_code: int, message: str = "") -> None:
+        self.status_code = status_code
+        super().__init__(message or f"retryable_http_status_{status_code}")
+
+
 DEFAULT_RETRYABLE_EXCEPTIONS: Tuple[Type[Exception], ...] = (
+    RetryableHTTPStatusError,
     httpx.TimeoutException,
     httpx.NetworkError,
     httpx.RemoteProtocolError,
+    httpx.HTTPStatusError,
     ConnectionError,
     TimeoutError,
     asyncio.TimeoutError,
