@@ -1,11 +1,21 @@
-"""Folklore classification, structured extraction, and traditional knowledge analysis."""
+"""Folklore extraction, classification, validation, TEK analysis, and variant preservation module."""
 
-from typing import Protocol
-from app.schemas.folklore import ClassificationResult, FolkloreDocument
-from app.schemas.source import SourceInfo
+from app.folklore.classifier import FolkloreClassifier
+from app.folklore.culture import CulturalAnalyzer
+from app.folklore.ecology import EcologyAnalyzer
+from app.folklore.entities import EntityExtractor
+from app.folklore.extractor import BaselineFolkloreExtractor
+from app.folklore.geography import GeographyResolver
+from app.folklore.validator import FolkloreValidator
+from app.folklore.variant_preserver import VariantPreserver
 
-
-class FolkloreExtractorInterface(Protocol):
-    """Abstract protocol for folklore extraction engines."""
-    async def extract(self, text: str, source: SourceInfo) -> FolkloreDocument:
-        ...
+__all__ = [
+    "BaselineFolkloreExtractor",
+    "FolkloreClassifier",
+    "FolkloreValidator",
+    "EntityExtractor",
+    "GeographyResolver",
+    "CulturalAnalyzer",
+    "EcologyAnalyzer",
+    "VariantPreserver",
+]

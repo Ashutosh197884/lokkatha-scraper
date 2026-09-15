@@ -1,9 +1,25 @@
-"""URL discovery engine modules (Search, Sitemap, Internal links)."""
+"""Web discovery modules for sitemaps, feeds, APIs, PDFs, archives, and link extraction."""
 
-from typing import List, Protocol
+from app.discovery.api import APIDiscoverer
+from app.discovery.archive import ArchiveDiscoverer, ArchiveItem
+from app.discovery.feed import FeedDiscoverer, FeedItem
+from app.discovery.links import LinkExtractor
+from app.discovery.pdf import PDFExtractor, PDFExtractResult
+from app.discovery.registry import SourceRegistry, SourceRegistryEntry
+from app.discovery.search import SearchDiscoverer
+from app.discovery.sitemap import SitemapDiscoverer
 
-
-class URLDiscoverer(Protocol):
-    """Protocol for discovery engines."""
-    async def discover(self, source: str) -> List[str]:
-        ...
+__all__ = [
+    "SourceRegistry",
+    "SourceRegistryEntry",
+    "SitemapDiscoverer",
+    "FeedDiscoverer",
+    "FeedItem",
+    "APIDiscoverer",
+    "PDFExtractor",
+    "PDFExtractResult",
+    "ArchiveDiscoverer",
+    "ArchiveItem",
+    "LinkExtractor",
+    "SearchDiscoverer",
+]

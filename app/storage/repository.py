@@ -1,4 +1,4 @@
-"""File-based JSON and relational repository implementations."""
+"""File-based JSON and relational repository implementations with metadata provenance."""
 
 import json
 from pathlib import Path
@@ -10,17 +10,18 @@ logger = get_logger("storage.repository")
 
 
 class JSONFolkloreRepository:
-    """Local JSON file repository for structured folklore documents."""
+    """Local JSON file repository for structured folklore documents with source provenance."""
 
     def __init__(self, base_dir: str = "data/structured") -> None:
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
     def save(self, doc: FolkloreDocument) -> Path:
-        """Save folklore document to JSON file named after doc.id."""
+        """Save folklore document to JSON file with standard source_information block."""
         file_path = self.base_dir / f"{doc.id}.json"
         with open(file_path, "w", encoding="utf-8") as f:
-            f.write(doc.model_dump_json(indent=2))
+            json_dict = doc.model_dump_with_source_info()
+            json.dump(json_dict, f, indent=2)
         logger.info("folklore_document_saved", id=doc.id, path=str(file_path))
         return file_path
 
@@ -31,6 +32,7 @@ class JSONFolkloreRepository:
             return None
         with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
+            # Remove redundant top-level source_information if present before Pydantic parsing
             return FolkloreDocument.model_validate(data)
 
     def list_all(self) -> List[FolkloreDocument]:

@@ -10,12 +10,30 @@ export type SourceStatus =
   | "disconnected";
 
 export type SourceType =
+  | "WEB_PAGE"
+  | "BLOG"
+  | "NEWS"
+  | "WIKI"
+  | "DIGITAL_LIBRARY"
+  | "ARCHIVE"
+  | "ACADEMIC_PAPER"
+  | "RESEARCH_REPOSITORY"
+  | "GOVERNMENT_DOCUMENT"
+  | "MUSEUM"
+  | "UNIVERSITY"
+  | "BOOK_METADATA"
+  | "PDF"
+  | "PUBLIC_DATASET"
+  | "API"
+  | "RSS"
+  | "XML"
+  | "SITEMAP"
+  | "COMMUNITY_ARCHIVE"
+  | "ORAL_HISTORY_ARCHIVE"
+  | "CULTURAL_DATABASE"
   | "website"
-  | "sitemap"
-  | "rss"
-  | "api"
   | "document_collection"
-  | "community";
+  | "community"; // legacy fallbacks
 
 export type PlanetTextureTheme =
   | "emerald-gas"
@@ -31,9 +49,9 @@ export type PlanetTextureTheme =
 export interface SourceOrbit {
   radius: number;          // Distance from central Sun
   angle: number;           // Current orbital radian angle
-  speed: number;           // Orbital speed (radians per frame / time delta)
+  speed: number;           // Orbital speed
   inclination: number;     // Vertical plane inclination angle in radians
-  eccentricity?: number;   // Slight ellipse eccentricity (default 1.0)
+  eccentricity?: number;   // Slight ellipse eccentricity
 }
 
 export interface SourceRotation {
@@ -66,6 +84,8 @@ export interface DataSource {
   id: string;
   name: string;
   url: string;
+  domain?: string;
+  platformName?: string;
   type: SourceType;
   status: SourceStatus;
   region: string;
@@ -81,4 +101,5 @@ export interface DataSource {
   maxDepth: number;
   crawlFrequency: string;
   lastError?: string;
+  pulseActive?: boolean;
 }

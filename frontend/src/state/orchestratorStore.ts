@@ -14,35 +14,31 @@ export interface SunCoreState {
   pulseSpeed: number;
   flareIntensity: number;
   coronaGlow: number;
-  coreTemperature: number; // e.g. 5778 K
+  coreTemperature: number;
   activePipelines: number;
 }
 
 export interface OrchestratorState {
-  // Navigation & View
   currentView: "orchestrator" | "sources" | "tasks" | "library" | "analytics" | "settings";
   selectedSourceId: string | null;
   focusedSourceId: string | null;
   isAddSourceModalOpen: boolean;
   isCreateTaskModalOpen: boolean;
-  simulationSpeed: number; // 1x, 2x, 5x, 0 (paused)
+  simulationSpeed: number;
   reducedMotion: boolean;
   soundEnabled: boolean;
   
-  // Core Elements
   sunCore: SunCoreState;
   sources: DataSource[];
   activeTask: ScrapeTask;
   tasksList: ScrapeTask[];
   
-  // Dashboard Metrics & Telemetry
   stats: SystemStats;
   resources: ResourceMetrics;
   queue: QueueItem[];
   activities: ActivityLogItem[];
   libraryRecords: FolkloreItem[];
   
-  // Search & Filter
   searchQuery: string;
 }
 
@@ -51,7 +47,9 @@ export const INITIAL_SOURCES: DataSource[] = [
     id: "source-wiki",
     name: "Wikipedia",
     url: "https://en.wikipedia.org/wiki/Category:Indian_folklore",
-    type: "website",
+    domain: "en.wikipedia.org",
+    platformName: "Wikipedia",
+    type: "WIKI",
     status: "fetching",
     region: "Pan-India",
     language: "en, hi",
@@ -93,7 +91,9 @@ export const INITIAL_SOURCES: DataSource[] = [
     id: "source-digital-lib",
     name: "Digital Library",
     url: "https://ndl.gov.in/cultural-heritage",
-    type: "document_collection",
+    domain: "ndl.gov.in",
+    platformName: "National Digital Library of India",
+    type: "DIGITAL_LIBRARY",
     status: "idle",
     region: "National",
     language: "Multilingual",
@@ -135,7 +135,9 @@ export const INITIAL_SOURCES: DataSource[] = [
     id: "source-archive",
     name: "Archive.org",
     url: "https://archive.org/details/indian-folklore-collection",
-    type: "api",
+    domain: "archive.org",
+    platformName: "Internet Archive",
+    type: "ARCHIVE",
     status: "fetching",
     region: "Global Archives",
     language: "en, bn, ta, mr",
@@ -180,7 +182,9 @@ export const INITIAL_SOURCES: DataSource[] = [
     id: "source-gov-portals",
     name: "Government Portals",
     url: "https://ignca.gov.in/divisions/janapada-sampada",
-    type: "website",
+    domain: "ignca.gov.in",
+    platformName: "IGNCA Janapada Sampada",
+    type: "GOVERNMENT_DOCUMENT",
     status: "analyzing",
     region: "Ministry of Culture",
     language: "hi, en, regional",
@@ -222,7 +226,9 @@ export const INITIAL_SOURCES: DataSource[] = [
     id: "source-cultural-sites",
     name: "Cultural Sites",
     url: "https://sahapedia.org/modules/oral-traditions",
-    type: "website",
+    domain: "sahapedia.org",
+    platformName: "Sahapedia",
+    type: "CULTURAL_DATABASE",
     status: "active",
     region: "Regional Hubs",
     language: "hi, raj, guj, ben",
@@ -264,7 +270,9 @@ export const INITIAL_SOURCES: DataSource[] = [
     id: "source-folklore-repos",
     name: "Folklore Repositories",
     url: "https://folklore.org.in/repository",
-    type: "api",
+    domain: "folklore.org.in",
+    platformName: "Folklore Congress Repositories",
+    type: "RESEARCH_REPOSITORY",
     status: "active",
     region: "Southern & Eastern India",
     language: "ta, te, kn, ml, or",
@@ -306,7 +314,9 @@ export const INITIAL_SOURCES: DataSource[] = [
     id: "source-academic-journals",
     name: "Academic Journals",
     url: "https://journals.sagepub.com/asian-ethnology",
-    type: "document_collection",
+    domain: "journals.sagepub.com",
+    platformName: "Asian Ethnology Journal",
+    type: "ACADEMIC_PAPER",
     status: "analyzing",
     region: "Scholarly",
     language: "en, regional",
@@ -348,7 +358,9 @@ export const INITIAL_SOURCES: DataSource[] = [
     id: "source-community",
     name: "Community Submissions",
     url: "https://lokkatha.org/community/submissions",
-    type: "community",
+    domain: "lokkatha.org",
+    platformName: "Lokkatha Community Intake",
+    type: "COMMUNITY_ARCHIVE",
     status: "idle",
     region: "Grassroots",
     language: "22 Scheduled Languages",
@@ -390,7 +402,9 @@ export const INITIAL_SOURCES: DataSource[] = [
     id: "source-news-blogs",
     name: "News & Blogs",
     url: "https://ruralindiaonline.org/en/articles/categories/culture/",
-    type: "rss",
+    domain: "ruralindiaonline.org",
+    platformName: "PARI Rural India",
+    type: "NEWS",
     status: "idle",
     region: "Rural Hubs",
     language: "en, hi, mr, bn, or",
@@ -432,7 +446,7 @@ export const INITIAL_SOURCES: DataSource[] = [
 
 export const INITIAL_ACTIVE_TASK: ScrapeTask = {
   id: "task-raj-folktales-01",
-  title: "Scraping Rajasthan Folktales",
+  title: "Rajasthan Folktales & TEK Discovery",
   description: "Targeted crawl and deep TEK extraction across Thar desert folklore repositories and digital archives.",
   targetRegion: "Rajasthan (Marwar, Mewar, Shekhawati)",
   sourceIds: ["source-wiki", "source-archive", "source-cultural-sites", "source-gov-portals"],
@@ -465,14 +479,14 @@ export const INITIAL_ACTIVE_TASK: ScrapeTask = {
       name: "Extracting entities & TEK",
       status: "pending",
       duration: "Pending",
-      message: "LLM prompt extractors targeting characters, motifs & water management",
+      message: "Structured extractors generating direct Evidence records for characters & TEK",
     },
     {
       id: "stage-store",
-      name: "Storing in database",
+      name: "Storing in repository",
       status: "pending",
       duration: "Pending",
-      message: "Saving canonical JSON records and pgvector embeddings",
+      message: "Saving canonical JSON records and source manifests",
     },
   ],
   currentStageIndex: 2,
@@ -492,7 +506,7 @@ export const INITIAL_ACTIVITIES: ActivityLogItem[] = [
     sourceId: "source-wiki",
     sourceName: "Wikipedia",
     eventType: "fetch",
-    message: "Fetched 12 pages under Category:Rajasthani_folktales",
+    message: "Fetched 12 pages under Category:Rajasthani_folktales with robots.txt check",
     level: "info",
   },
   {
@@ -501,7 +515,7 @@ export const INITIAL_ACTIVITIES: ActivityLogItem[] = [
     sourceId: "source-archive",
     sourceName: "Archive.org",
     eventType: "extract",
-    message: "Parsing document: Annals and Antiquities of Rajasthan Vol 2",
+    message: "Preserved original text layer: Annals and Antiquities of Rajasthan Vol 2",
     level: "info",
   },
   {
@@ -510,7 +524,7 @@ export const INITIAL_ACTIVITIES: ActivityLogItem[] = [
     sourceId: "source-cultural-sites",
     sourceName: "Cultural Sites",
     eventType: "extract",
-    message: "Extracted 3 stories (Mumal-Mahendra, Dhola-Maru, Pabuji)",
+    message: "Extracted 3 stories with evidence objects (Mumal-Mahendra, Dhola-Maru, Pabuji)",
     level: "success",
   },
   {
@@ -528,7 +542,7 @@ export const INITIAL_ACTIVITIES: ActivityLogItem[] = [
     sourceId: "source-academic-journals",
     sourceName: "Academic Journals",
     eventType: "validate",
-    message: "Analyzing TEK: Johad water structures & Khejri sacred groves",
+    message: "Validated TEK: Johad water harvesting & Khejri sacred groves with direct evidence",
     level: "success",
   },
   {
@@ -537,7 +551,7 @@ export const INITIAL_ACTIVITIES: ActivityLogItem[] = [
     sourceId: "source-folklore-repos",
     sourceName: "Folklore Repositories",
     eventType: "store",
-    message: "Stored 5 validated records with canonical IDs",
+    message: "Stored 5 validated records with canonical IDs & source manifests",
     level: "success",
   },
   {
@@ -568,14 +582,59 @@ export const INITIAL_FOLKLORE_RECORDS: FolkloreItem[] = [
     folkloreType: "Love Story / Romantic Legend",
     region: ["Rajasthan", "Jaisalmer", "Umerkot"],
     language: ["hi", "raj"],
-    sourceName: "Cultural Sites",
+    originalLanguage: "Rajasthani (Marwari)",
+    sourceName: "Sahapedia",
+    domain: "sahapedia.org",
     sourceUrl: "https://sahapedia.org/mumal-mahendra",
     discoveredAt: "2026-09-14 20:12:15",
     confidence: 0.96,
     summary: "The tragic love story of Princess Mumal of Lodrawa and Prince Mahendra of Sodha Sodhi, famous for the magical palace Kak Mahal and nocturnal desert rides on the swift camel Cheetal.",
+    story: "In the desert realm of Jaisalmer, Princess Mumal resided in the magical palace of Kak Mahal along the Kak river. Prince Mahendra of Umerkot heard of her beauty and visited her secretly each night, riding his extraordinary camel Cheetal across the sand dunes. Through a tragic misunderstanding and deception, their love remained immortalized in Rajasthani oral ballads and folk poetry.",
     characters: ["Mumal", "Mahendra", "Cheetal (Camel)", "Sumal"],
     motifs: ["T10 - Falling in love", "H900 - Impossible tasks", "K1300 - Seduction by deception"],
     tekCount: 3,
+    evidenceCount: 4,
+    evidenceList: [
+      {
+        evidenceId: "evi-mumal-01",
+        sourceId: "source-cultural-sites",
+        documentId: "doc-mumal-01",
+        url: "https://sahapedia.org/mumal-mahendra",
+        claim: "Princess Mumal of Lodrawa and Prince Mahendra oral ballad documented in Marwar tradition.",
+        evidenceType: "direct",
+        location: "Paragraph 1-3",
+        retrievedAt: "2026-09-14T20:12:15Z",
+        contextSnippet: "Princess Mumal of Lodrawa was famed across the Thar desert...",
+      },
+      {
+        evidenceId: "evi-mumal-02",
+        sourceId: "source-cultural-sites",
+        documentId: "doc-mumal-01",
+        url: "https://sahapedia.org/mumal-mahendra",
+        claim: "Cheetal camel navigation across Thar sand dunes.",
+        evidenceType: "direct",
+        location: "Section 2, Paragraph 4",
+        retrievedAt: "2026-09-14T20:12:15Z",
+      },
+    ],
+    variants: [
+      {
+        variantId: "var-mumal-01",
+        variantTitle: "Mumal-Mahendra (Jaisalmer Bardic Ballad)",
+        sourcePlatform: "Sahapedia",
+        sourceUrl: "https://sahapedia.org/mumal-mahendra",
+        region: "Jaisalmer",
+        differences: ["Emphasizes the labyrinthine Kak palace puzzles and nocturnal riding."],
+      },
+      {
+        variantId: "var-mumal-02",
+        variantTitle: "Mahendra of Umerkot (Sindhi/Marwari Romance)",
+        sourcePlatform: "Internet Archive",
+        sourceUrl: "https://archive.org/details/indian-folklore-collection",
+        region: "Sindh / Marwar border",
+        differences: ["Focuses on royal lineage alliances and desert pastoral migration routes."],
+      },
+    ],
     verified: true,
   },
   {
@@ -585,14 +644,18 @@ export const INITIAL_FOLKLORE_RECORDS: FolkloreItem[] = [
     folkloreType: "Heroic Tale / Epic",
     region: ["Rajasthan", "Marwar"],
     language: ["raj", "hi"],
-    sourceName: "Archive.org",
+    originalLanguage: "Rajasthani (Dingal)",
+    sourceName: "Internet Archive",
+    domain: "archive.org",
     sourceUrl: "https://archive.org/details/epic-of-pabuji",
     discoveredAt: "2026-09-14 20:08:40",
     confidence: 0.98,
     summary: "14th-century hero-deity Pabuji protected the sacred cows of Charani Deval Mata using the black mare Kesar Kalami, revered as protector of pastoral camels and creator of the Phad painting tradition.",
+    story: "Pabuji was a 14th-century Rathore folk deity who promised to protect the cows belonging to the Charani ascetic Deval Mata. When his brother-in-law Jindrav Khichi raided the cattle, Pabuji abandoned his wedding ceremony to defend the herds, riding the magical mare Kesar Kalami and laying down his life. His epic is recited overnight by Bhopa bards facing painted scrolls (Phad).",
     characters: ["Pabuji Rathore", "Deval Mata", "Jindrav Khichi", "Kesar Kalami"],
     motifs: ["B184.1 - Magic horse", "V220 - Sacrificial protection of livestock"],
     tekCount: 5,
+    evidenceCount: 5,
     verified: true,
   },
   {
@@ -602,14 +665,17 @@ export const INITIAL_FOLKLORE_RECORDS: FolkloreItem[] = [
     folkloreType: "Origin Story / Ecological Legend",
     region: ["Rajasthan", "Jodhpur", "Khejarli"],
     language: ["hi", "raj"],
-    sourceName: "Academic Journals",
-    sourceUrl: "https://journals.sagepub.com/bishnoi-ecology",
+    originalLanguage: "Rajasthani",
+    sourceName: "Asian Ethnology Journal",
+    domain: "journals.sagepub.com",
+    sourceUrl: "https://journals.sagepub.com/asian-ethnology",
     discoveredAt: "2026-09-14 19:54:10",
     confidence: 0.99,
     summary: "In 1730, Amrita Devi Bishnoi and 363 villagers sacrificed their lives embracing sacred Khejri trees (Prosopis cineraria) to prevent the Maharaja's men from cutting them down, birthing the Chipko philosophy.",
     characters: ["Amrita Devi Bishnoi", "Maharaja Abhai Singh", "Bishnoi Elders"],
     motifs: ["Sacred tree taboo", "Environmental martyrdom", "Coexistence with wildlife"],
     tekCount: 8,
+    evidenceCount: 6,
     verified: true,
   },
   {
@@ -619,7 +685,9 @@ export const INITIAL_FOLKLORE_RECORDS: FolkloreItem[] = [
     folkloreType: "Myth / Ritual Narrative",
     region: ["West Bengal", "Sundarbans"],
     language: ["bn"],
+    originalLanguage: "Bengali",
     sourceName: "Wikipedia",
+    domain: "en.wikipedia.org",
     sourceUrl: "https://en.wikipedia.org/wiki/Bonbibi",
     discoveredAt: "2026-09-14 19:40:05",
     confidence: 0.94,
@@ -627,6 +695,7 @@ export const INITIAL_FOLKLORE_RECORDS: FolkloreItem[] = [
     characters: ["Bonbibi", "Shah Jangali", "Dokkhin Rai (Tiger Spirit)", "Dukhe"],
     motifs: ["Forest spirit pact", "Tiger shape-shifter", "Sustainable honey harvesting"],
     tekCount: 6,
+    evidenceCount: 5,
     verified: true,
   },
 ];

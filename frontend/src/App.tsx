@@ -14,6 +14,7 @@ import {
   INITIAL_FOLKLORE_RECORDS,
   INITIAL_SOURCES,
 } from "./state/orchestratorStore";
+import { defaultEventConsumer } from "./state/eventConsumer";
 import { Header } from "./components/layout/Header";
 import { Sidebar } from "./components/layout/Sidebar";
 import { OrchestratorView } from "./pages/OrchestratorView";
@@ -25,6 +26,7 @@ import { SettingsView } from "./pages/SettingsView";
 import { SourceDetailDrawer } from "./components/sources/SourceDetailDrawer";
 import { AddSourceModal } from "./components/sources/AddSourceModal";
 import { CreateTaskModal } from "./components/tasks/CreateTaskModal";
+import { TaskCompletionModal } from "./components/tasks/TaskCompletionModal";
 
 export const App: React.FC = () => {
   // Navigation
@@ -45,6 +47,7 @@ export const App: React.FC = () => {
   // Modals
   const [isAddSourceOpen, setIsAddSourceOpen] = useState(false);
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
+  const [isTaskCompletedModalOpen, setIsTaskCompletedModalOpen] = useState(false);
 
   // Telemetry
   const [simulationSpeed, setSimulationSpeed] = useState(1);
@@ -55,10 +58,13 @@ export const App: React.FC = () => {
   const [stats, setStats] = useState<SystemStats>({
     status: "running",
     sourcesActive: 8,
-    tasksRunning: 5,
+    tasksRunning: 4,
     pagesProcessed: 1246,
     storiesDiscovered: 1842,
-    successRate: 98,
+    documentsFound: 1420,
+    relevantDocuments: 618,
+    evidenceRecords: 1940,
+    successRate: 99.2,
     totalDataProcessedGb: 2.3,
   });
 
@@ -105,7 +111,33 @@ export const App: React.FC = () => {
     } catch {}
   };
 
-  // Real-time Orchestration Simulation Tick Loop
+  // Real-time Event-driven and Simulation Loop
+  useEffect(() => {
+    defaultEventConsumer.connect();
+
+    const unsubscribe = defaultEventConsumer.subscribe((evt) => {
+      const timeStr = new Date().toTimeString().split(" ")[0];
+      setActivities((prev) => [
+        {
+          id: `act-${Date.now()}`,
+          timestamp: timeStr,
+          sourceId: evt.source_id || "system",
+          sourceName: evt.data?.platform || "Lokkatha Core",
+          eventType: "fetch",
+          message: evt.message,
+          level: "info",
+        },
+        ...prev.slice(0, 24),
+      ]);
+    });
+
+    return () => {
+      unsubscribe();
+      defaultEventConsumer.disconnect();
+    };
+  }, []);
+
+  // Orchestration Simulation Tick Loop
   useEffect(() => {
     if (simulationSpeed === 0) return;
 
@@ -113,7 +145,7 @@ export const App: React.FC = () => {
       // 1. Advance Active Task progress
       setActiveTask((prev) => {
         if (prev.status !== "running") return prev;
-        const nextProgress = prev.progress >= 100 ? 15 : prev.progress + 1;
+        const nextProgress = prev.progress + 1;
         const newElapsed = prev.elapsedSeconds + 1;
 
         // Stage progress transitions
@@ -128,13 +160,24 @@ export const App: React.FC = () => {
           updatedStages[3].status = "completed";
           updatedStages[4].status = "running";
         }
-        if (nextProgress >= 100) {
+
+        // Trigger task completion when reaching 100%
+        if (nextProgress >= 100 && prev.progress < 100) {
           updatedStages[4].status = "completed";
+          setIsTaskCompletedModalOpen(true);
+          playCosmicBeep(880);
+          return {
+            ...prev,
+            progress: 100,
+            status: "completed",
+            elapsedSeconds: newElapsed,
+            stages: updatedStages,
+          };
         }
 
         return {
           ...prev,
-          progress: nextProgress,
+          progress: nextProgress >= 100 ? 100 : nextProgress,
           elapsedSeconds: newElapsed,
           stages: updatedStages,
           pagesProcessed: prev.pagesProcessed + (Math.random() > 0.6 ? 1 : 0),
@@ -142,7 +185,7 @@ export const App: React.FC = () => {
         };
       });
 
-      // 2. Add realistic subtle jitter to resource gauges
+      // 2. Resource gauges telemetry jitter
       setResources((prev) => ({
         ...prev,
         cpuUsage: Math.min(95, Math.max(35, prev.cpuUsage + Math.floor((Math.random() - 0.5) * 6))),
@@ -152,15 +195,15 @@ export const App: React.FC = () => {
         processingSpeed: Math.min(240, Math.max(80, prev.processingSpeed + Math.floor((Math.random() - 0.5) * 10))),
       }));
 
-      // 3. Random live event generation
+      // 3. Pipeline Event Generation
       if (Math.random() < 0.35) {
         const randomSource = sources[Math.floor(Math.random() * sources.length)];
         const eventTemplates = [
-          `Fetched ${Math.floor(2 + Math.random() * 8)} pages from ${randomSource.name}`,
-          `Extracted narrative: Folktales of ${randomSource.region}`,
-          `Validated Traditional Ecological Knowledge (TEK) entry`,
-          `Computed SHA-256 deduplication hash`,
-          `Discovered regional variant with confidence 0.96`,
+          `Discovered ${Math.floor(2 + Math.random() * 8)} pages with robots compliance on ${randomSource.name}`,
+          `Extracted structured narrative with direct provenance from ${randomSource.domain || randomSource.name}`,
+          `Validated Traditional Ecological Knowledge (TEK) claim`,
+          `Recorded canonical variant tree for oral tradition`,
+          `Computed SHA-256 layer hash with zero text modification`,
         ];
         const newMsg = eventTemplates[Math.floor(Math.random() * eventTemplates.length)];
         const now = new Date();
@@ -176,7 +219,7 @@ export const App: React.FC = () => {
             message: newMsg,
             level: "info",
           },
-          ...prev.slice(0, 19),
+          ...prev.slice(0, 24),
         ]);
 
         // Increment stats
@@ -184,6 +227,7 @@ export const App: React.FC = () => {
           ...prev,
           pagesProcessed: prev.pagesProcessed + 1,
           storiesDiscovered: prev.storiesDiscovered + (Math.random() > 0.5 ? 1 : 0),
+          evidenceRecords: (prev.evidenceRecords || 1940) + (Math.random() > 0.6 ? 2 : 0),
         }));
 
         playCosmicBeep(520 + Math.random() * 100);
@@ -216,7 +260,7 @@ export const App: React.FC = () => {
         sourceId: newSource.id,
         sourceName: newSource.name,
         eventType: "connect",
-        message: `New source planet launched into orbit at ${newSource.orbit.radius} AU`,
+        message: `New source planet launched into orbit at ${newSource.orbit.radius} AU (${newSource.type})`,
         level: "success",
       },
       ...prev,
@@ -232,7 +276,9 @@ export const App: React.FC = () => {
     setStats((prev) => ({
       ...prev,
       tasksRunning: prev.tasksRunning + 1,
+      status: "running",
     }));
+    setIsTaskCompletedModalOpen(false);
     playCosmicBeep(660);
   };
 
@@ -337,6 +383,23 @@ export const App: React.FC = () => {
         onClose={() => setIsCreateTaskOpen(false)}
         sources={sources}
         onLaunchTask={handleLaunchTask}
+      />
+
+      {/* Task Completion Modal */}
+      <TaskCompletionModal
+        isOpen={isTaskCompletedModalOpen}
+        onClose={() => setIsTaskCompletedModalOpen(false)}
+        taskTitle={activeTask.title}
+        sourcesUsed={sources.filter((s) => activeTask.sourceIds.includes(s.id))}
+        pagesProcessed={activeTask.pagesProcessed || 128}
+        documentsFound={stats.documentsFound || 1420}
+        relevantDocuments={stats.relevantDocuments || 618}
+        evidenceRecords={stats.evidenceRecords || 1940}
+        folkloreRecords={activeTask.storiesDiscovered || 48}
+        onViewLibrary={() => {
+          setIsTaskCompletedModalOpen(false);
+          setCurrentView("library");
+        }}
       />
     </div>
   );

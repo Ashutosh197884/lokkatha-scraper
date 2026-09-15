@@ -13,7 +13,9 @@ export interface Planet3DNode {
   atmosphereMesh: THREE.Mesh;
   ringMesh?: THREE.Mesh;
   orbitLine: THREE.LineLoop;
+  laserBeam?: THREE.Line;
   currentAngle: number;
+  pulseTimer: number;
 }
 
 export interface DataParticle {
@@ -32,25 +34,27 @@ export class SolarSystemEngine {
   public scene: THREE.Scene;
   public camera: THREE.PerspectiveCamera;
   public renderer: THREE.WebGLRenderer;
-  
+
   private sunGroup: THREE.Group;
   private sunMesh: THREE.Mesh;
   private sunCoronaMesh: THREE.Mesh;
   private sunOuterGlowMesh: THREE.Mesh;
   private sunLight: THREE.PointLight;
   private ambientLight: THREE.AmbientLight;
-  
+
   private starsParticles: THREE.Points;
   private planetsMap: Map<string, Planet3DNode> = new Map();
   private dataParticles: DataParticle[] = [];
   private particleGeo: THREE.SphereGeometry;
-  
+
   // Animation & Camera State
   private isDestroyed = false;
   private animationFrameId: number | null = null;
   private clock = new THREE.Clock();
   public simulationSpeed = 1.0;
-  
+  private isDecelerating = false;
+  private decelerationFactor = 1.0;
+
   // Camera controls state
   private isMouseDown = false;
   private mouseX = 0;
@@ -63,11 +67,11 @@ export class SolarSystemEngine {
   private currentCameraRadius = 680;
   private targetLookAt = new THREE.Vector3(0, 0, 0);
   private currentLookAt = new THREE.Vector3(0, 0, 0);
-  
+
   private focusedSourceId: string | null = null;
   private raycaster = new THREE.Raycaster();
   private mouseVec = new THREE.Vector2();
-  
+
   // Callbacks
   public onPlanetClick?: (source: DataSource) => void;
   public onPlanetHover?: (source: DataSource | null, screenPos: { x: number; y: number } | null) => void;
@@ -95,14 +99,14 @@ export class SolarSystemEngine {
     this.renderer.setSize(width, height);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.1;
+    this.renderer.toneMappingExposure = 1.15;
     container.appendChild(this.renderer.domElement);
 
     // 4. Lights
-    this.ambientLight = new THREE.AmbientLight(0x223048, 0.8);
+    this.ambientLight = new THREE.AmbientLight(0x223048, 0.85);
     this.scene.add(this.ambientLight);
 
-    this.sunLight = new THREE.PointLight(0xffaa22, 2.5, 1800, 1.2);
+    this.sunLight = new THREE.PointLight(0xffaa22, 2.8, 1900, 1.2);
     this.sunLight.position.set(0, 0, 0);
     this.scene.add(this.sunLight);
 
@@ -110,7 +114,7 @@ export class SolarSystemEngine {
     this.starsParticles = this.createStarfield();
     this.scene.add(this.starsParticles);
 
-    // 6. Central Sun Core
+    // 6. Central Sun Core (Lokkatha Intelligence Core)
     this.sunGroup = new THREE.Group();
     const { sunMesh, coronaMesh, glowMesh } = this.createSunCore();
     this.sunMesh = sunMesh;
@@ -122,7 +126,7 @@ export class SolarSystemEngine {
     this.scene.add(this.sunGroup);
 
     // 7. Particle Geometry template
-    this.particleGeo = new THREE.SphereGeometry(1.2, 8, 8);
+    this.particleGeo = new THREE.SphereGeometry(1.4, 8, 8);
 
     // 8. Event listeners
     this.bindEvents();
@@ -151,7 +155,7 @@ export class SolarSystemEngine {
       const phi = Math.acos(Math.random() * 2 - 1);
 
       positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
-      positions[i * 3 + 1] = (radius * Math.sin(phi) * Math.sin(theta)) * 0.7; // slight galactic disc flattening
+      positions[i * 3 + 1] = (radius * Math.sin(phi) * Math.sin(theta)) * 0.7;
       positions[i * 3 + 2] = radius * Math.cos(phi);
 
       const color = colorPalette[Math.floor(Math.random() * colorPalette.length)];
@@ -177,9 +181,9 @@ export class SolarSystemEngine {
 
   private createSunCore(): { sunMesh: THREE.Mesh; coronaMesh: THREE.Mesh; glowMesh: THREE.Mesh } {
     const sunTexture = createSunTexture();
-    
+
     // Core sphere
-    const sunGeo = new THREE.SphereGeometry(22, 64, 64);
+    const sunGeo = new THREE.SphereGeometry(23, 64, 64);
     const sunMat = new THREE.MeshBasicMaterial({
       map: sunTexture,
       color: 0xffe082,
@@ -187,7 +191,7 @@ export class SolarSystemEngine {
     const sunMesh = new THREE.Mesh(sunGeo, sunMat);
 
     // Inner pulsating corona layer
-    const coronaGeo = new THREE.SphereGeometry(25.5, 48, 48);
+    const coronaGeo = new THREE.SphereGeometry(27, 48, 48);
     const coronaMat = new THREE.MeshBasicMaterial({
       color: 0xff9900,
       transparent: true,
@@ -198,7 +202,7 @@ export class SolarSystemEngine {
     const coronaMesh = new THREE.Mesh(coronaGeo, coronaMat);
 
     // Outer luminous solar atmosphere glow
-    const glowGeo = new THREE.SphereGeometry(32, 32, 32);
+    const glowGeo = new THREE.SphereGeometry(34, 32, 32);
     const glowMat = new THREE.MeshBasicMaterial({
       color: 0xff6600,
       transparent: true,
@@ -219,6 +223,7 @@ export class SolarSystemEngine {
       if (!currentIds.has(id)) {
         this.scene.remove(node.group);
         this.scene.remove(node.orbitLine);
+        if (node.laserBeam) this.scene.remove(node.laserBeam);
         this.planetsMap.delete(id);
       }
     }
@@ -242,13 +247,13 @@ export class SolarSystemEngine {
     const radius = source.visual.radius || 5;
     const geo = new THREE.SphereGeometry(radius, 32, 32);
     const texture = createPlanetTexture(source.visual.theme, source.visual.color);
-    
+
     const mat = new THREE.MeshStandardMaterial({
       map: texture,
       roughness: 0.7,
       metalness: 0.1,
       emissive: new THREE.Color(source.visual.color),
-      emissiveIntensity: 0.15,
+      emissiveIntensity: 0.2,
     });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.rotation.z = THREE.MathUtils.degToRad(source.rotation.tilt || 15);
@@ -256,11 +261,11 @@ export class SolarSystemEngine {
     group.add(mesh);
 
     // 2. Planet atmosphere glow halo
-    const atmoGeo = new THREE.SphereGeometry(radius * 1.25, 24, 24);
+    const atmoGeo = new THREE.SphereGeometry(radius * 1.3, 24, 24);
     const atmoMat = new THREE.MeshBasicMaterial({
       color: new THREE.Color(source.visual.glowColor),
       transparent: true,
-      opacity: 0.3,
+      opacity: 0.35,
       blending: THREE.AdditiveBlending,
       side: THREE.BackSide,
     });
@@ -291,6 +296,10 @@ export class SolarSystemEngine {
     this.scene.add(orbitLine);
     this.scene.add(group);
 
+    // 5. Laser Beam Conduit connecting planet to Sun Core
+    const laserBeam = this.createLaserBeam(source);
+    this.scene.add(laserBeam);
+
     const node: Planet3DNode = {
       source,
       group,
@@ -298,7 +307,9 @@ export class SolarSystemEngine {
       atmosphereMesh,
       ringMesh,
       orbitLine,
+      laserBeam,
       currentAngle: source.orbit.angle,
+      pulseTimer: 0,
     };
 
     this.planetsMap.set(source.id, node);
@@ -322,43 +333,70 @@ export class SolarSystemEngine {
 
     const geo = new THREE.BufferGeometry().setFromPoints(points);
     const isActive = source.status === "active" || source.status === "fetching" || source.status === "analyzing";
-    
+
     const mat = new THREE.LineBasicMaterial({
       color: isActive ? new THREE.Color(source.visual.glowColor) : new THREE.Color(0x1e293b),
       transparent: true,
-      opacity: isActive ? 0.65 : 0.2,
+      opacity: isActive ? 0.7 : 0.2,
       blending: THREE.AdditiveBlending,
     });
 
     return new THREE.LineLoop(geo, mat);
   }
 
+  private createLaserBeam(source: DataSource): THREE.Line {
+    const points = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0)];
+    const geo = new THREE.BufferGeometry().setFromPoints(points);
+    const mat = new THREE.LineBasicMaterial({
+      color: new THREE.Color(source.visual.glowColor),
+      transparent: true,
+      opacity: 0.0,
+      blending: THREE.AdditiveBlending,
+    });
+    return new THREE.Line(geo, mat);
+  }
+
   private updatePlanetAppearance(node: Planet3DNode): void {
     const s = node.source;
     const isActive = s.status === "active" || s.status === "fetching" || s.status === "analyzing";
     const isError = s.status === "error";
+    const isCompleted = s.status === "completed" || s.pulseActive;
 
-    // Atmosphere opacity
+    // Atmosphere opacity & color
     const atmoMat = node.atmosphereMesh.material as THREE.MeshBasicMaterial;
     if (isError) {
       atmoMat.color.setHex(0xef4444);
-      atmoMat.opacity = 0.55;
+      atmoMat.opacity = 0.65;
+    } else if (isCompleted) {
+      atmoMat.color.setHex(0x10b981);
+      atmoMat.opacity = 0.75;
     } else if (isActive) {
       atmoMat.color.set(s.visual.glowColor);
-      atmoMat.opacity = 0.45;
+      atmoMat.opacity = 0.55;
     } else {
       atmoMat.color.set(s.visual.glowColor);
-      atmoMat.opacity = 0.15;
+      atmoMat.opacity = 0.18;
     }
 
     // Orbit line luminosity
     const orbitMat = node.orbitLine.material as THREE.LineBasicMaterial;
     if (isActive) {
       orbitMat.color.set(s.visual.glowColor);
-      orbitMat.opacity = 0.7;
+      orbitMat.opacity = 0.75;
     } else {
       orbitMat.color.setHex(0x1e293b);
       orbitMat.opacity = 0.2;
+    }
+
+    // Laser conduit beam
+    if (node.laserBeam) {
+      const beamMat = node.laserBeam.material as THREE.LineBasicMaterial;
+      if (isActive) {
+        beamMat.color.set(s.visual.glowColor);
+        beamMat.opacity = 0.45;
+      } else {
+        beamMat.opacity = 0.0;
+      }
     }
   }
 
@@ -368,11 +406,37 @@ export class SolarSystemEngine {
     const inc = node.source.orbit.inclination || 0;
     const ecc = node.source.orbit.eccentricity || 1.0;
 
-    const x = r * Math.cos(angle) * ecc;
-    const z = r * Math.sin(angle);
-    const y = Math.sin(angle) * Math.sin(inc) * (r * 0.25);
+    let x = r * Math.cos(angle) * ecc;
+    let z = r * Math.sin(angle);
+    let y = Math.sin(angle) * Math.sin(inc) * (r * 0.25);
+
+    // Error wobble
+    if (node.source.status === "error") {
+      x += (Math.random() - 0.5) * 1.5;
+      y += (Math.random() - 0.5) * 1.5;
+      z += (Math.random() - 0.5) * 1.5;
+    }
 
     node.group.position.set(x, y, z);
+
+    // Update laser beam endpoints if active
+    if (node.laserBeam) {
+      const positions = node.laserBeam.geometry.attributes.position as THREE.BufferAttribute;
+      if (positions) {
+        positions.setXYZ(0, 0, 0, 0); // Sun center
+        positions.setXYZ(1, x, y, z); // Planet center
+        positions.needsUpdate = true;
+      }
+    }
+  }
+
+  public decelerateGradually(): void {
+    this.isDecelerating = true;
+  }
+
+  public resumeSpeed(): void {
+    this.isDecelerating = false;
+    this.decelerationFactor = 1.0;
   }
 
   public focusOnPlanet(sourceId: string): void {
@@ -422,22 +486,21 @@ export class SolarSystemEngine {
   }
 
   private spawnDataParticle(node: Planet3DNode): void {
-    if (this.dataParticles.length >= 80) return;
+    if (this.dataParticles.length >= 100) return;
 
     const startPos = new THREE.Vector3();
     node.group.getWorldPosition(startPos);
 
     const targetPos = new THREE.Vector3(0, 0, 0);
-    // Add an arch control point for curved orbital trajectory
-    const midX = (startPos.x + targetPos.x) / 2 + (Math.random() - 0.5) * 30;
-    const midY = (startPos.y + targetPos.y) / 2 + 25 + Math.random() * 20;
-    const midZ = (startPos.z + targetPos.z) / 2 + (Math.random() - 0.5) * 30;
+    const midX = (startPos.x + targetPos.x) / 2 + (Math.random() - 0.5) * 35;
+    const midY = (startPos.y + targetPos.y) / 2 + 25 + Math.random() * 25;
+    const midZ = (startPos.z + targetPos.z) / 2 + (Math.random() - 0.5) * 35;
     const controlPos = new THREE.Vector3(midX, midY, midZ);
 
     const mat = new THREE.MeshBasicMaterial({
       color: new THREE.Color(node.source.visual.glowColor),
       transparent: true,
-      opacity: 0.9,
+      opacity: 0.95,
       blending: THREE.AdditiveBlending,
     });
     const mesh = new THREE.Mesh(this.particleGeo, mat);
@@ -450,19 +513,20 @@ export class SolarSystemEngine {
       targetPos,
       controlPos,
       progress: 0,
-      speed: 0.008 + Math.random() * 0.006,
+      speed: 0.010 + Math.random() * 0.008,
       color: node.source.visual.glowColor,
       sourceId: node.source.id,
     });
   }
 
   private updateDataParticles(delta: number): void {
+    const effSpeed = this.simulationSpeed * this.decelerationFactor;
     for (let i = this.dataParticles.length - 1; i >= 0; i--) {
       const p = this.dataParticles[i];
-      p.progress += p.speed * this.simulationSpeed * (delta * 60);
+      p.progress += p.speed * effSpeed * (delta * 60);
 
       if (p.progress >= 1.0) {
-        // Absorbed by Sun
+        // Absorbed by Sun core
         this.scene.remove(p.mesh);
         p.mesh.geometry.dispose();
         (p.mesh.material as THREE.Material).dispose();
@@ -470,17 +534,15 @@ export class SolarSystemEngine {
 
         // Flash corona briefly
         const coronaMat = this.sunCoronaMesh.material as THREE.MeshBasicMaterial;
-        coronaMat.opacity = Math.min(coronaMat.opacity + 0.04, 0.7);
+        coronaMat.opacity = Math.min(coronaMat.opacity + 0.05, 0.75);
       } else {
-        // Quadratic Bezier interpolation
         const t = p.progress;
         const invT = 1 - t;
         p.mesh.position.x = invT * invT * p.startPos.x + 2 * invT * t * p.controlPos.x + t * t * p.targetPos.x;
         p.mesh.position.y = invT * invT * p.startPos.y + 2 * invT * t * p.controlPos.y + t * t * p.targetPos.y;
         p.mesh.position.z = invT * invT * p.startPos.z + 2 * invT * t * p.controlPos.z + t * t * p.targetPos.z;
-        
-        // Scale particle slightly as it accelerates
-        const s = 1.0 + Math.sin(t * Math.PI) * 0.5;
+
+        const s = 1.0 + Math.sin(t * Math.PI) * 0.6;
         p.mesh.scale.set(s, s, s);
       }
     }
@@ -506,7 +568,6 @@ export class SolarSystemEngine {
         this.targetCameraPhi = Math.max(0.2, Math.min(Math.PI / 2 - 0.05, this.targetCameraPhi + deltaY * 0.005));
       }
 
-      // Check hover
       const rect = el.getBoundingClientRect();
       this.mouseVec.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       this.mouseVec.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
@@ -578,7 +639,6 @@ export class SolarSystemEngine {
   }
 
   private updateCameraPosition(): void {
-    // Interpolate towards target lookAt
     if (this.focusedSourceId) {
       const node = this.planetsMap.get(this.focusedSourceId);
       if (node) {
@@ -613,10 +673,16 @@ export class SolarSystemEngine {
     const delta = this.clock.getDelta();
     const elapsedTime = this.clock.getElapsedTime();
 
+    // Gradual deceleration handling
+    if (this.isDecelerating) {
+      this.decelerationFactor = Math.max(0.2, this.decelerationFactor - delta * 0.25);
+    }
+    const effSpeed = this.simulationSpeed * this.decelerationFactor;
+
     // 1. Sun surface & corona rotation + pulsing
-    this.sunMesh.rotation.y += 0.003 * this.simulationSpeed;
-    this.sunCoronaMesh.rotation.y -= 0.005 * this.simulationSpeed;
-    this.sunCoronaMesh.rotation.z += 0.002 * this.simulationSpeed;
+    this.sunMesh.rotation.y += 0.003 * effSpeed;
+    this.sunCoronaMesh.rotation.y -= 0.005 * effSpeed;
+    this.sunCoronaMesh.rotation.z += 0.002 * effSpeed;
 
     const pulse = 1.0 + Math.sin(elapsedTime * 2.5) * 0.04;
     this.sunCoronaMesh.scale.set(pulse, pulse, pulse);
@@ -625,25 +691,29 @@ export class SolarSystemEngine {
 
     // 2. Stars slow galactic drift
     if (this.starsParticles) {
-      this.starsParticles.rotation.y += 0.00015 * this.simulationSpeed;
+      this.starsParticles.rotation.y += 0.00015 * effSpeed;
     }
 
     // 3. Planet orbital revolution & axial rotation
     for (const node of this.planetsMap.values()) {
+      const s = node.source;
+      const isActive = s.status === "active" || s.status === "fetching" || s.status === "analyzing";
+      // Active sources orbit and rotate faster
+      const speedMultiplier = isActive ? 2.2 : 1.0;
+
       // Axial rotation
-      node.mesh.rotation.y += node.source.rotation.speed * this.simulationSpeed * (delta * 60);
+      node.mesh.rotation.y += node.source.rotation.speed * speedMultiplier * effSpeed * (delta * 60);
 
       // Orbital revolution
-      if (this.simulationSpeed > 0) {
-        node.currentAngle += node.source.orbit.speed * this.simulationSpeed * (delta * 60);
+      if (effSpeed > 0) {
+        node.currentAngle += node.source.orbit.speed * speedMultiplier * effSpeed * (delta * 60);
         this.updatePlanetPosition(node);
       }
 
       // Spawning data particles for active/fetching sources
-      const s = node.source;
-      if ((s.status === "fetching" || s.status === "active") && Math.random() < 0.12 * this.simulationSpeed) {
+      if ((s.status === "fetching" || s.status === "active") && Math.random() < 0.14 * effSpeed) {
         this.spawnDataParticle(node);
-      } else if (s.status === "analyzing" && Math.random() < 0.08 * this.simulationSpeed) {
+      } else if (s.status === "analyzing" && Math.random() < 0.09 * effSpeed) {
         this.spawnDataParticle(node);
       }
     }

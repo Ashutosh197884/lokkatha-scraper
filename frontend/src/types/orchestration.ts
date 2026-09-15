@@ -1,41 +1,25 @@
-import { DataSource } from "./source";
-import { ScrapeTask } from "./task";
+import { SourceType } from "./source";
 
-export interface ResourceMetrics {
-  cpuUsage: number;     // 0 - 100
-  memoryUsage: number;  // 0 - 100
-  networkUsage: number; // 0 - 100
-  storageUsage: number; // 0 - 100
-  processingSpeed: number; // pages / min
-  speedHistory: number[];  // last 20 ticks for sparkline
-}
-
-export interface SystemStats {
-  status: "optimal" | "running" | "warning" | "error" | "paused";
-  sourcesActive: number;
-  tasksRunning: number;
-  pagesProcessed: number;
-  storiesDiscovered: number;
-  successRate: number;
-  totalDataProcessedGb: number;
-}
-
-export interface ActivityLogItem {
-  id: string;
-  timestamp: string;
-  sourceId?: string;
-  sourceName: string;
-  eventType: "fetch" | "extract" | "validate" | "store" | "error" | "connect" | "queue";
-  message: string;
-  level: "info" | "success" | "warning" | "error";
-  details?: Record<string, any>;
-}
-
-export interface QueueItem {
+export interface EvidenceRecord {
+  evidenceId: string;
   sourceId: string;
-  sourceName: string;
-  pendingUrlsCount: number;
-  color: string;
+  documentId: string;
+  url: string;
+  claim: string;
+  evidenceType: "direct" | "inferred" | "generated";
+  location?: string;
+  retrievedAt: string;
+  contextSnippet?: string;
+}
+
+export interface VariantVersion {
+  variantId: string;
+  variantTitle: string;
+  sourcePlatform: string;
+  sourceUrl: string;
+  region?: string;
+  language?: string;
+  differences: string[];
 }
 
 export interface FolkloreItem {
@@ -45,23 +29,63 @@ export interface FolkloreItem {
   folkloreType: string;
   region: string[];
   language: string[];
+  originalLanguage?: string;
   sourceName: string;
   sourceUrl: string;
+  sourceType?: SourceType;
+  domain?: string;
+  author?: string | null;
+  publishedAt?: string | null;
   discoveredAt: string;
   confidence: number;
   summary: string;
+  story?: string;
+  generatedSummary?: string;
   characters: string[];
+  locations?: string[];
   motifs: string[];
   tekCount: number;
+  evidenceCount?: number;
+  evidenceList?: EvidenceRecord[];
+  variants?: VariantVersion[];
   verified: boolean;
 }
 
-export interface BackendEvent {
-  event: string;
+export interface ActivityLogItem {
+  id: string;
   timestamp: string;
-  sourceId?: string;
-  url?: string;
-  pagesProcessed?: number;
-  storiesDiscovered?: number;
-  data?: any;
+  sourceId: string;
+  sourceName: string;
+  eventType: "fetch" | "extract" | "validate" | "store" | "connect" | "queue" | "error";
+  message: string;
+  level: "info" | "success" | "warning" | "error";
+}
+
+export interface QueueItem {
+  sourceId: string;
+  sourceName: string;
+  pendingUrlsCount: number;
+  color: string;
+}
+
+export interface SystemStats {
+  status: "idle" | "running" | "paused" | "completed";
+  sourcesActive: number;
+  tasksRunning: number;
+  pagesProcessed: number;
+  storiesDiscovered: number;
+  documentsFound?: number;
+  relevantDocuments?: number;
+  evidenceRecords?: number;
+  successRate: number;
+  totalDataProcessedGb: number;
+}
+
+export interface ResourceMetrics {
+  cpuUsage: number;
+  memoryUsage: number;
+  networkUsage: number;
+  storageUsage: number;
+  processingSpeed: number; // records per minute
+  speedHistory: number[];
 }

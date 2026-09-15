@@ -1,13 +1,16 @@
 import React, { useState } from "react";
 import { FolkloreItem } from "../types/orchestration";
 import { GlassPanel } from "../components/common/GlassPanel";
+import { ResultDetailModal } from "../components/library/ResultDetailModal";
 import {
   BookMarked,
   CheckCircle2,
   Download,
   ExternalLink,
+  Eye,
   Feather,
   Filter,
+  GitBranch,
   Leaf,
   MapPin,
   Search,
@@ -24,6 +27,7 @@ export const DataLibraryView: React.FC<DataLibraryViewProps> = ({ records }) => 
   const [search, setSearch] = useState("");
   const [selectedRegion, setSelectedRegion] = useState<string>("all");
   const [activeTab, setActiveTab] = useState<"all" | "tek">("all");
+  const [selectedRecord, setSelectedRecord] = useState<FolkloreItem | null>(null);
 
   const filtered = records.filter((rec) => {
     const matchesSearch =
@@ -51,7 +55,7 @@ export const DataLibraryView: React.FC<DataLibraryViewProps> = ({ records }) => 
   };
 
   return (
-    <div className="flex-1 p-6 overflow-y-auto bg-space-950 text-slate-100 space-y-6">
+    <div className="flex-1 p-6 overflow-y-auto bg-space-950 text-slate-100 space-y-6 custom-scrollbar">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -60,7 +64,7 @@ export const DataLibraryView: React.FC<DataLibraryViewProps> = ({ records }) => 
             Folklore Knowledge Repository ({records.length} Records)
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Structured database of preserved Indian folktales, oral epics, legends, and Traditional Ecological Knowledge (TEK).
+            Authoritative source-derived database of Indian folklore, oral epics, variants, and Traditional Ecological Knowledge (TEK).
           </p>
         </div>
 
@@ -69,7 +73,7 @@ export const DataLibraryView: React.FC<DataLibraryViewProps> = ({ records }) => 
           className="px-4 py-2 rounded-xl bg-space-900 hover:bg-white/10 text-white font-medium text-xs flex items-center gap-2 border border-white/10 transition-all shadow-glass"
         >
           <Download className="w-4 h-4 text-cyan-400" />
-          <span>Export JSON</span>
+          <span>Export Provenance JSON</span>
         </button>
       </div>
 
@@ -114,17 +118,21 @@ export const DataLibraryView: React.FC<DataLibraryViewProps> = ({ records }) => 
       {/* Records List */}
       <div className="space-y-4">
         {filtered.map((item) => (
-          <GlassPanel key={item.id} className="p-5 space-y-4 hover:border-cyan-500/30 transition-all">
+          <GlassPanel
+            key={item.id}
+            onClick={() => setSelectedRecord(item)}
+            className="p-5 space-y-4 hover:border-cyan-500/40 transition-all cursor-pointer group relative"
+          >
             {/* Top row */}
             <div className="flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold text-white font-sans">
+                  <h3 className="text-base font-bold text-white font-sans group-hover:text-cyan-300 transition-colors">
                     {item.title}
                   </h3>
                   {item.verified && (
                     <span className="flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
-                      <CheckCircle2 className="w-3 h-3" /> Verified Provenance
+                      <CheckCircle2 className="w-3 h-3" /> Provenance Verified
                     </span>
                   )}
                 </div>
@@ -169,7 +177,7 @@ export const DataLibraryView: React.FC<DataLibraryViewProps> = ({ records }) => 
               {/* Thompson Motifs */}
               <div className="p-2.5 rounded-xl bg-space-900/40 border border-white/5">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 mb-1.5">
-                  <Tag className="w-3 h-3 text-purple-400" /> Folk Motifs & Archetypes
+                  <Tag className="w-3 h-3 text-purple-400" /> Motifs & Archetypes
                 </span>
                 <div className="flex flex-wrap gap-1">
                   {item.motifs.map((m) => (
@@ -187,13 +195,36 @@ export const DataLibraryView: React.FC<DataLibraryViewProps> = ({ records }) => 
                 </span>
                 <div className="space-y-1 text-[11px] text-slate-300 font-mono">
                   <div>Region: <span className="text-white">{item.region.join(", ")}</span></div>
-                  <div>Source: <span className="text-cyan-400">{item.sourceName}</span></div>
+                  <div>Platform: <span className="text-cyan-400">{item.sourceName}</span></div>
                 </div>
+              </div>
+            </div>
+
+            {/* Card Footer Bar */}
+            <div className="flex items-center justify-between pt-1 text-[11px] text-slate-400 font-mono border-t border-white/5">
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-1 text-emerald-400">
+                  <Leaf className="w-3.5 h-3.5" /> {item.tekCount} TEK Records
+                </span>
+                <span className="flex items-center gap-1 text-purple-400">
+                  <GitBranch className="w-3.5 h-3.5" /> {item.variants ? item.variants.length : 2} Variants
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1 text-cyan-400 group-hover:underline">
+                <Eye className="w-3.5 h-3.5" />
+                <span>Inspect Evidence & Source →</span>
               </div>
             </div>
           </GlassPanel>
         ))}
       </div>
+
+      {/* Result Detail Modal */}
+      <ResultDetailModal
+        item={selectedRecord}
+        onClose={() => setSelectedRecord(null)}
+      />
     </div>
   );
 };
