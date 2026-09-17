@@ -211,6 +211,104 @@ class TestHTTPCrawlerRetries5xx:
         assert calls["n"] == 3  # initial + 2 retries
 
 
+class TestBrowserFallback:
+    @staticmethod
+    def _manager_with_html(tmp_path, html, extra=None):
+        """Build a CrawlManager serving one fixed HTML page via MockTransport."""
+        from app.crawler.manager import CrawlManager
+
+        def handler(request: httpx.Request):
+            if request.url.path == "/robots.txt":
+                return httpx.Response(200, text="User-agent: *\nAllow: /\n")
+            return httpx.Response(200, text=html, headers={"Content-Type": "text/html"})
+
+        crawler_kwargs = {"delay_seconds": 0.0}
+        if extra:
+            crawler_kwargs.update(extra)
+        settings = Settings(
+            storage={"raw_dir": str(tmp_path / "raw")},
+            crawler=crawler_kwargs,
+        )
+        transport = httpx.MockTransport(handler)
+        return settings, transport
+
+    @pytest.mark.asyncio
+    async def test_js_shell_page_routes_to_browser(self, tmp_path, monkeypatch):
+        """An SPA shell (<noscript> + empty root) must be re-rendered by the
+        browser crawler; the post-JS HTML then flows through the pipeline."""
+        from unittest.mock import AsyncMock
+
+        from app.crawler.manager import CrawlManager
+
+        shell = (
+            '<!DOCTYPE html><html><head><title>App</title></head>'
+            '<body><noscript>Enable JavaScript</noscript><div id="root"></div>'
+            '<script src="/bundle.js"></script></body></html>'
+        )
+        settings, transport = self._manager_with_html(tmp_path, shell)
+
+        rendered = AsyncMock(return_value="<html><body><p>Rendered story text</p></body></html>")
+        monkeypatch.setattr(
+            "app.crawler.browser.BrowserCrawler._render", rendered, raising=False
+        )
+
+        async with httpx.AsyncClient(transport=transport) as client:
+            manager = CrawlManager(settings)
+            results = await manager.crawl(
+                seeds=["https://example.org/app"], max_pages=1, max_depth=0, client=client
+            )
+            await manager.browser_crawler.close()
+
+        assert len(results) == 1
+        assert results[0].is_success
+        assert results[0].response_headers.get("x-rendered-by") == "browser"
+        assert rendered.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_static_html_never_hits_browser(self, tmp_path, monkeypatch):
+        """A normal static page must NOT trigger the browser fallback."""
+        from unittest.mock import AsyncMock
+
+        from app.crawler.manager import CrawlManager
+
+        settings, transport = self._manager_with_html(tmp_path, FOLK_PAGE)
+        rendered = AsyncMock(return_value="<html></html>")
+        monkeypatch.setattr(
+            "app.crawler.browser.BrowserCrawler._render", rendered, raising=False
+        )
+
+        async with httpx.AsyncClient(transport=transport) as client:
+            manager = CrawlManager(settings)
+            results = await manager.crawl(
+                seeds=["https://example.org/static"], max_pages=1, max_depth=0, client=client
+            )
+            await manager.browser_crawler.close()
+
+        assert len(results) == 1 and results[0].is_success
+        assert rendered.await_count == 0
+
+
+class TestRobotsFailClosed:
+    @pytest.mark.asyncio
+    async def test_robots_fetch_failure_disallows(self, tmp_path, monkeypatch):
+        """When robots.txt cannot be fetched (500/exception), the crawler must
+        NOT crawl the host — fail closed instead of the old allow-all behavior."""
+        from app.crawler.robots import RobotsManager
+
+        def handler(request: httpx.Request):
+            if request.url.path == "/robots.txt":
+                return httpx.Response(500, text="boom")
+            return httpx.Response(200, text="<html>content</html>", headers={"Content-Type": "text/html"})
+
+        settings = Settings()
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(transport=transport) as client:
+            robots = RobotsManager(settings)
+            allowed = await robots.is_allowed("https://example.org/page", client=client)
+
+        assert allowed is False
+
+
 class TestFrontierPendingWork:
     @pytest.mark.asyncio
     async def test_has_pending_work_counts_in_flight(self):

@@ -1,11 +1,13 @@
 """Crawl coordinator managing concurrent workers, frontier, robots, rate limiting, and link discovery."""
 
 import asyncio
+from pathlib import Path
 from typing import List, Optional
 import httpx
 
 from app.config.logging import get_logger
 from app.config.settings import Settings, get_settings
+from app.crawler.browser import BrowserCrawler
 from app.crawler.domain_filter import DomainFilter
 from app.crawler.frontier import URLFrontier
 from app.crawler.http_client import HTTPCrawler
@@ -39,6 +41,7 @@ class CrawlManager:
             default_delay=self.settings.crawler.delay_seconds
         )
         self.http_crawler = http_crawler or HTTPCrawler(self.settings)
+        self.browser_crawler = BrowserCrawler(self.settings)
         self.link_extractor = LinkExtractor()
         # Domains whose robots.txt Crawl-delay we have already applied to the limiter.
         self._crawl_delay_applied: set = set()
@@ -55,6 +58,29 @@ class CrawlManager:
     def _release_page(self) -> None:
         """Refund a reserved slot that did not produce a crawl result."""
         self._pages_claimed = max(0, self._pages_claimed - 1)
+
+    @staticmethod
+    def _looks_like_js_shell(result: CrawlResult) -> bool:
+        """Heuristic: HTML that only mounts an empty SPA root until JavaScript runs.
+
+        ponytail: fixed marker list (noscript tag + common SPA mount ids);
+        word-count-only detection misfires on small static pages. Upgrade
+        path: rendered-vs-source text comparison inside the browser path.
+        """
+        if not (result.raw_html_path and result.content_hash):
+            return False
+        try:
+            html = Path(result.raw_html_path).read_text(encoding="utf-8", errors="replace")[:4096]
+        except OSError:
+            return False
+        lowered = html.lower()
+        return (
+            "<noscript" in lowered
+            or 'id="root"' in lowered
+            or 'id="app"' in lowered
+            or 'id="__next"' in lowered
+            or 'id="__nuxt"' in lowered
+        )
 
     async def _crawl_worker(
         self,
@@ -117,8 +143,16 @@ class CrawlManager:
                     # Rate limiting politeness wait
                     await self.rate_limiter.wait(item.url)
 
-                    # Fetch page via HTTP
+                    # Fetch page via HTTP; if the site returns a JS-only shell,
+                    # re-render it in a real browser instead.
                     result = await self.http_crawler.fetch(item.url, client=client)
+                    if (
+                        self.settings.browser.enabled
+                        and result.is_success
+                        and self._looks_like_js_shell(result)
+                    ):
+                        logger.info("js_shell_detected", url=norm_url, browser_fallback=True)
+                        result = await self.browser_crawler.fetch(item.url)
                     results.append(result)
                     claim_consumed = True  # budget spent on this page
 
@@ -215,6 +249,7 @@ class CrawlManager:
         finally:
             if should_close_client:
                 await client.aclose()
+            await self.browser_crawler.close()
 
         stats = self.frontier.get_stats()
         logger.info(

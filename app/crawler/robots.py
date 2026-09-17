@@ -109,16 +109,20 @@ class RobotsManager:
                     parser.allow_all = True
                     logger.debug("robots_not_found_allow_all", hostname=hostname, status=response.status_code)
                 else:
-                    # Non-200, non-404 responses -> permit with caution unless blocked
-                    parser.allow_all = True
-                    logger.warning("robots_fetch_non_200", hostname=hostname, status=response.status_code)
+                    # Server errors and auth walls: fail closed. RFC 9309 says a
+                    # crawler must not fetch when robots.txt is unreachable, and
+                    # 401/403 mean the site withholds robot rules.
+                    parser.disallow_all = True
+                    logger.warning("robots_fetch_non_200_disallow", hostname=hostname, status=response.status_code)
             finally:
                 if should_close_client:
                     await client.aclose()
 
         except Exception as exc:
-            logger.warning("robots_fetch_failed_default_allow", hostname=hostname, error=str(exc))
-            parser.allow_all = True
+            logger.warning("robots_fetch_failed_default_disallow", hostname=hostname, error=str(exc))
+            parser.disallow_all = True
+            # ponytail: error entries cache for the full TTL; a transient robots
+            # outage pauses that host until expiry. Upgrade path: short-TTL cache.
 
         entry = RobotsEntry(parser, sitemaps, crawl_delay)
 
