@@ -1,0 +1,36 @@
+# fly.io configuration for the Lokkatha crawler API (long-running asyncio + SSE)
+
+app = "lokkatha-api"
+primary_region = "bom"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[vm]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+[env]
+  PYTHONUNBUFFERED = "1"
+
+# Public HTTP on 8080 -> container $PORT
+[[services]]
+  internal_port = 8080
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["http", "tls"]
+
+  # SSE streams are long-lived: give them generous idle timeouts
+  [services.http_checks]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "15s"
+    method = "GET"
+    path = "/api/health"

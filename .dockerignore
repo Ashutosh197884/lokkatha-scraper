@@ -1,0 +1,13 @@
+.git
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+data/
+frontend/
+tests/
+*.log
+.env
+.vercel
+DEPLOYMENT.md
